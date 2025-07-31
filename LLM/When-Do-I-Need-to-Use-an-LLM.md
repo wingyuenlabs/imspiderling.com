@@ -1,3 +1,13 @@
+---
+Title: When Do I Need to Use an LLM?
+Description: This article aims to bring the conversation about LLMs back down to earth, exploring not only the wide array of use cases where LLMs can add real value, but also the limitations they face.
+Author: Iván
+Date: 2025-07-25
+Robots: noindex,nofollow
+Template: index
+tagline: When Do I Need to Use an LLM
+---
+
 # When Do I Need to Use an LLM?
 
 This article aims to bring the conversation about LLMs back down to earth, exploring not only the wide array of use cases where LLMs can add real value, but also the limitations they face.

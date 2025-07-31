@@ -1,3 +1,12 @@
+---
+Title: Youtube Downloader - My first MCP Server
+Description: MCP is a protocol designed to simplify how applications provide context to LLMs and AI agents. Think of it as the USB-C port of AI applications.
+Author: 
+Date: 2025-07-25
+Robots: noindex,nofollow
+Template: index
+tagline: Youtube Downloader - My first MCP Server
+---
 Hi everyone, recently, after reading some blogs and content about MCP on the internet, I decided to experiment with it by creating a local MCP server to perform a simple task: downloading a YouTube video. This post is to talk a bit about MCP and the solution I built.
 
 You might ask, why download YouTube videos? Well, during my recent trip from the Netherlands to Brazil, which takes around 12 hours, I wanted to watch some tech and fun videos offline. I know YouTube offers a subscription that allows offline access, but I wasn’t planning to pay for another subscription just for this one trip.
