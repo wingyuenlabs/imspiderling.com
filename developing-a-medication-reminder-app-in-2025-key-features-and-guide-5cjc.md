@@ -1,4 +1,3 @@
-
 ---
 Title: Developing a Medication Reminder App in 2025: Key Features and Guide
 Description: MCP is a protocol designed to simplify how applications provide context to LLMs and AI agents. Think of it as the USB-C port of AI applications.
