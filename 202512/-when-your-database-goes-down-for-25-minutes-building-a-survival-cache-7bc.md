@@ -332,4 +332,196 @@ Template: index
 <p><strong>Key finding</strong>: Tier cache maintained availability <strong>for previously-cached keys</strong> by <br>
 serving from L3 (RocksDB) after L1 expired.This assumes all requested keys were previously cached. In reality, newly added configs or never-requested keys won't be in L3 and will fail. This represents typical production traffic patterns.</p>
 
-<p>Why did EhCache fail? Its disk persistence is designed for overflow, not outage recovery. When the cache expires, it tries to fetch from the database (which is down) rather than serving stale disk data.</p
+<p>Why did EhCache fail? Its disk persistence is designed for overflow, not outage recovery. When the cache expires, it tries to fetch from the database (which is down) rather than serving stale disk data.</p>
+<h3>
+  
+  
+  Test 2: Normal Operation Performance
+</h3>
+
+<p><strong>Setup</strong>: Database healthy, measuring latency for cache operations</p>
+
+<div class="table-wrapper-paragraph"><table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Tier Cache</th>
+<th>EhCache</th>
+<th>Caffeine</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cache hit (memory)</td>
+<td>2.50 μs</td>
+<td>6.31 μs</td>
+<td>2.74 μs</td>
+</tr>
+<tr>
+<td>Cache miss (DB up)</td>
+<td>1.2 ms</td>
+<td>1.3 ms</td>
+<td>1.1 ms</td>
+</tr>
+<tr>
+<td>Disk fallback</td>
+<td>19.11 μs</td>
+<td>N/A</td>
+<td>N/A</td>
+</tr>
+</tbody>
+</table></div>
+
+<p><strong>Important clarification</strong>: The "cache miss" numbers include network round-trip (mocked) to the database. The "disk fallback" is what happens when the DB is down—we serve from RocksDB instead.</p>
+
+<p>During normal operations, tier cache performs nearly identically to vanilla Caffeine. The disk layer only matters during outages.</p>
+<h3>
+  
+  
+  Test 3: Write Throughput Under Memory Pressure
+</h3>
+
+<p><strong>Setup</strong>: 50K writes with 10K cache size limit (heavy eviction)</p>
+
+<div class="table-wrapper-paragraph"><table>
+<thead>
+<tr>
+<th>Strategy</th>
+<th>Total Time</th>
+<th>Throughput</th>
+<th>vs Baseline</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Caffeine Only</td>
+<td>37 ms</td>
+<td>1,351,351/s</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Tier Cache</td>
+<td>140 ms</td>
+<td>357,143/s</td>
+<td><strong>26%</strong></td>
+</tr>
+<tr>
+<td>EhCache</td>
+<td>201 ms</td>
+<td>248,756/s</td>
+<td>18%</td>
+</tr>
+</tbody>
+</table></div>
+
+<p><strong>This is the cost.</strong> Async disk persistence reduces write throughput by ~74%. Every eviction triggers a disk write, and under heavy churn, this adds up.</p>
+<h2>
+  
+  
+  What I Got Wrong
+</h2>
+
+<p>This is a learning project, not production-ready code. Here are the real limitations you need to understand:</p>
+<h3>
+  
+  
+  1. The Cold Start Problem
+</h3>
+
+<p>New instances start with empty RocksDB. During an outage, they have no stale data to serve.</p>
+
+<p><strong>What happens</strong>: Auto-scaling spins up a new pod → L1 empty → L2 down → L3 empty → requests fail.</p>
+
+<p>My benchmarks showed 100% availability, but that assumed warm caches. Real-world availability during outages depends on whether instances have previously cached the requested keys.</p>
+<h3>
+  
+  
+  2. Single Node Limitation
+</h3>
+
+<p>Each instance maintains its own local RocksDB. In a distributed deployment with multiple instances, each has different stale data based on what it personally cached. Request routing becomes non-deterministic—the same config key might return different values depending on which instance handles the request.</p>
+
+<p>This isn't a bug to fix; it's a fundamental architectural choice. Local disk persistence trades consistency for simplicity. Solving this requires either accepting eventual consistency or moving to distributed storage like Redis, which defeats the "simple local cache" design goal.</p>
+<h2>
+  
+  
+  When Should You Actually Use This?
+</h2>
+
+<p>This project demonstrates caching patterns and outage resilience strategies. Based on the architecture:</p>
+
+<p><strong>Appropriate for:</strong></p>
+
+<ul>
+<li>Single-node applications</li>
+<li>Systems where eventual consistency across instances is acceptable</li>
+</ul>
+
+<p><strong>Not appropriate for:</strong></p>
+
+<ul>
+<li>Multi-instance production deployments requiring consistency</li>
+<li>Applications needing strong consistency guarantees</li>
+</ul>
+<h2>
+  
+  
+  Try It Yourself
+</h2>
+
+<p>The full implementation is here <strong><a href="https://github.com/SivagurunathanV/tier-cache" rel="noopener noreferrer">github.com/SivagurunathanV/tier-cache</a></strong></p>
+
+<p><strong>Quick start:</strong><br>
+</p>
+
+<div class="highlight js-code-highlight">
+<pre class="highlight shell"><code>git clone https://github.com/SivagurunathanV/tier-cache
+<span class="nb">cd </span>tier-cache
+./gradlew <span class="nb">test</span>    <span class="c"># Run test suite</span>
+./gradlew run     <span class="c"># Interactive demo</span>
+</code></pre>
+
+</div>
+
+
+
+<h2>
+  
+  
+  What's Next?
+</h2>
+
+<p><strong>If you're building something similar:</strong></p>
+
+<ul>
+<li>Start simple (JSON files) and profile before over-engineering</li>
+<li>Measure your actual outage frequency and duration</li>
+<li>Calculate the real cost of downtime vs. infrastructure</li>
+<li>Test with realistic failure scenarios, not just happy paths</li>
+</ul>
+
+<p><strong>Key improvements for production:</strong></p>
+
+<ul>
+<li>Implement write coalescing (batch evictions)</li>
+<li>Add circuit breakers and error handling</li>
+<li>Build comprehensive observability</li>
+<li>Test cold start and multi-instance scenarios</li>
+</ul>
+
+<p>I'd love to hear about your failure survival strategies. What patterns have kept your services alive during database outages? What trade-offs have you made?</p>
+
+
+
+
+<p><strong>Resources:</strong></p>
+
+<ul>
+<li><a href="https://github.com/SivagurunathanV/tier-cache" rel="noopener noreferrer">Full source code and tests</a></li>
+<li><a href="https://rocksdb.org/" rel="noopener noreferrer">RocksDB documentation</a></li>
+<li><a href="https://github.com/ben-manes/caffeine" rel="noopener noreferrer">Caffeine cache library</a></li>
+</ul>
+
+
+
+
