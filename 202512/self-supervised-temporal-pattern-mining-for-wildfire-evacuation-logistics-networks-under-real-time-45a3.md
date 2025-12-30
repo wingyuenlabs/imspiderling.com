@@ -256,4 +256,71 @@ Template: index
   Challenge 2: Data Scarcity in Emergency Scenarios
 </h3>
 
-<p>During my investigation of evacuation data, I found that high-quality labeled data was extremely scarce. Most evacuation events had incomplete or inconsistent docum
+<p>During my investigation of evacuation data, I found that high-quality labeled data was extremely scarce. Most evacuation events had incomplete or inconsistent documentation.</p>
+
+<p><strong>Solution</strong>: I implemented a synthetic data generation pipeline that used self-supervised learning to create realistic training scenarios:<br>
+</p>
+
+<div class="highlight js-code-highlight">
+<pre class="highlight python"><code><span class="k">class</span> <span class="nc">SyntheticEvacuationGenerator</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">pattern_miner</span><span class="p">,</span> <span class="n">physics_simulator</span><span class="p">):</span>
+        <span class="n">self</span><span class="p">.</span><span class="n">pattern_miner</span> <span class="o">=</span> <span class="n">pattern_miner</span>
+        <span class="n">self</span><span class="p">.</span><span class="n">physics_simulator</span> <span class="o">=</span> <span class="n">physics_simulator</span>
+
+    <span class="k">def</span> <span class="nf">generate_scenarios</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">base_patterns</span><span class="p">,</span> <span class="n">num_scenarios</span><span class="p">,</span> <span class="n">variability</span><span class="o">=</span><span class="mf">0.3</span><span class="p">):</span>
+        <span class="sh">"""</span><span class="s">Generate synthetic evacuation scenarios</span><span class="sh">"""</span>
+        <span class="n">scenarios</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nf">range</span><span class="p">(</span><span class="n">num_scenarios</span><span class="p">):</span>
+            <span class="c1"># Sample from learned patterns
+</span>            <span class="n">pattern_idx</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nf">len</span><span class="p">(</span><span class="n">base_patterns</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,))</span>
+            <span class="n">base_pattern</span> <span class="o">=</span> <span class="n">base_patterns</span><span class="p">[</span><span class="n">pattern_idx</span><span class="p">]</span>
+
+            <span class="c1"># Apply realistic variations
+</span>            <span class="n">varied_pattern</span> <span class="o">=</span> <span class="n">self</span><span class="p">.</span><span class="nf">_apply_variations</span><span class="p">(</span><span class="n">base_pattern</span><span class="p">,</span> <span class="n">variability</span><span class="p">)</span>
+
+            <span class="c1"># Simulate physics-based constraints
+</span>            <span class="n">physics_constraints</span> <span class="o">=</span> <span class="n">self</span><span class="p">.</span><span class="n">physics_simulator</span><span class="p">.</span><span class="nf">simulate</span><span class="p">(</span><span class="n">varied_pattern</span><span class="p">)</span>
+
+            <span class="c1"># Combine patterns with physics
+</span>            <span class="n">full_scenario</span> <span class="o">=</span> <span class="n">self</span><span class="p">.</span><span class="nf">_combine_patterns</span><span class="p">(</span><span class="n">varied_pattern</span><span class="p">,</span> <span class="n">physics_constraints</span><span class="p">)</span>
+            <span class="n">scenarios</span><span class="p">.</span><span class="nf">append</span><span class="p">(</span><span class="n">full_scenario</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">torch</span><span class="p">.</span><span class="nf">stack</span><span class="p">(</span><span class="n">scenarios</span><span class="p">)</span>
+</code></pre>
+
+</div>
+
+
+
+<h3>
+  
+  
+  Challenge 3: Computational Constraints in Field Deployments
+</h3>
+
+<p>While exploring deployment options, I discovered that most emergency operations centers had limited computational resources. The models needed to run on edge devices with intermittent connectivity.</p>
+
+<p><strong>Solution</strong>: I developed a knowledge distillation approach that compressed the temporal pattern miner into a lightweight model:<br>
+</p>
+
+<div class="highlight js-code-highlight">
+<pre class="highlight python"><code><span class="k">class</span> <span class="nc">TemporalKnowledgeDistillation</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">teacher_model</span><span class="p">,</span> <span class="n">student_model</span><span class="p">,</span> <span class="n">temperature</span><span class="o">=</span><span class="mf">2.0</span><span class="p">):</span>
+        <span class="n">self</span><span class="p">.</span><span class="n">teacher</span> <span class="o">=</span> <span class="n">teacher_model</span>
+        <span class="n">self</span><span class="p">.</span><span class="n">student</span> <span class="o">=</span> <span class="n">student_model</span>
+        <span class="n">self</span><span class="p">.</span><span class="n">temperature</span> <span class="o">=</span> <span class="n">temperature</span>
+
+    <span class="k">def</span> <span class="nf">distill</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">temporal_data</span><span class="p">,</span> <span class="n">num_epochs</span><span class="o">=</span><span class="mi">100</span><span class="p">):</span>
+        <span class="sh">"""</span><span class="s">Distill knowledge from teacher to student</span><span class="sh">"""</span>
+        <span class="n">optimizer</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="n">optim</span><span class="p">.</span><span class="nc">Adam</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">student</span><span class="p">.</span><span class="nf">parameters</span><span class="p">(),</span> <span class="n">lr</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">epoch</span> <span class="ow">in</span> <span class="nf">range</span><span class="p">(</span><span class="n">num_epochs</span><span class="p">):</span>
+            <span class="c1"># Teacher predictions (soft targets)
+</span>            <span class="k">with</span> <span class="n">torch</span><span class="p">.</span><span class="nf">no_grad</span><span class="p">():</span>
+                <span class="n">teacher_logits</span> <span class="o">=</span> <span class="n">self</span><span class="p">.</span><span class="nf">teacher</span><span class="p">(</span><span class="n">temporal_data</span><span class="p">)</span> <span class="o">/</span> <span class="n">self</span><span class="p">.</span><span class="n">temperature</span>
+                <span class="n">teacher_probs</span> <span class="o">=</span> <span class="n">F</span><span class="p">.</span><span class="nf">softmax</span><span class="p">(</span><span class="n">teacher_logits</span><span class="p">,</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+
+            <span class="c1"># Student predictions
+</span>            <span class="n">student_logits</span> <span class="o">=</span> <span class="n">self</span><span class="p">.</span><span class="nf">student</span><span class="p">(</span><span class="n">temporal_data</span><span class="p">)</span> <span class="o">/</span> <span class="n">self</span><span class="p">.</span><span class="n">temperature</span>
+            <span class="n">student_probs</span> <span class="o">=</span> <span class="n">F</span><span class="p">.</span><span class="nf">softmax</span><span class="p">(</span><span class="n">student_logits</span><span class="p">,</span> <span class="n">dim</span><span cla
