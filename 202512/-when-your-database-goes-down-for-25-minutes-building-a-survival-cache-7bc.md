@@ -172,4 +172,164 @@ Template: index
     <span class="kd">private</span> <span class="kd">final</span> <span class="nc">ObjectMapper</span> <span class="n">mapper</span><span class="o">;</span>
 
     <span class="kd">public</span> <span class="nf">RocksDBDiskStore</span><span class="o">(</span><span class="nc">String</span> <span class="n">path</span><span class="o">)</span> <span class="kd">throws</span> <span class="nc">RocksDBException</span> <span class="o">{</span>
-        <span class="n
+        <span class="nc">RocksDB</span><span class="o">.</span><span class="na">loadLibrary</span><span class="o">();</span>
+
+        <span class="nc">Options</span> <span class="n">options</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">Options</span><span class="o">()</span>
+            <span class="o">.</span><span class="na">setCreateIfMissing</span><span class="o">(</span><span class="kc">true</span><span class="o">)</span>
+            <span class="o">.</span><span class="na">setCompressionType</span><span class="o">(</span><span class="nc">CompressionType</span><span class="o">.</span><span class="na">LZ4_COMPRESSION</span><span class="o">)</span>
+            <span class="o">.</span><span class="na">setMaxOpenFiles</span><span class="o">(</span><span class="mi">256</span><span class="o">)</span>
+            <span class="o">.</span><span class="na">setWriteBufferSize</span><span class="o">(</span><span class="mi">8</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span><span class="o">);</span> <span class="c1">// 8MB buffer</span>
+
+        <span class="k">this</span><span class="o">.</span><span class="na">db</span> <span class="o">=</span> <span class="nc">RocksDB</span><span class="o">.</span><span class="na">open</span><span class="o">(</span><span class="n">options</span><span class="o">,</span> <span class="n">path</span><span class="o">);</span>
+        <span class="k">this</span><span class="o">.</span><span class="na">mapper</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">ObjectMapper</span><span class="o">();</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+</code></pre>
+
+</div>
+
+
+
+<h3>
+  
+  
+  Disk Management Built-In
+</h3>
+
+<p><strong>Implementation</strong>: RocksDB has a configurable background cleanup thread:<br>
+</p>
+
+<div class="highlight js-code-highlight">
+<pre class="highlight java"><code><span class="c1">// From RocksDBDiskStore.java</span>
+<span class="k">if</span><span class="o">(</span><span class="n">cleanupDuration</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="o">)</span> <span class="o">{</span>
+    <span class="k">this</span><span class="o">.</span><span class="na">scheduler</span> <span class="o">=</span> <span class="nc">Executors</span><span class="o">.</span><span class="na">newSingleThreadScheduledExecutor</span><span class="o">(</span><span class="n">r</span> <span class="o">-&gt;</span> <span class="o">{</span>
+        <span class="nc">Thread</span> <span class="n">thread</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">Thread</span><span class="o">(</span><span class="n">r</span><span class="o">,</span> <span class="s">"RocksDB-Cleanup"</span><span class="o">);</span>
+        <span class="n">thread</span><span class="o">.</span><span class="na">setDaemon</span><span class="o">(</span><span class="kc">true</span><span class="o">);</span>
+        <span class="k">return</span> <span class="n">thread</span><span class="o">;</span>
+    <span class="o">});</span>
+    <span class="k">this</span><span class="o">.</span><span class="na">scheduler</span><span class="o">.</span><span class="na">scheduleAtFixedRate</span><span class="o">(</span>
+        <span class="k">this</span><span class="o">::</span><span class="n">cleanup</span><span class="o">,</span> 
+        <span class="n">cleanupDuration</span><span class="o">,</span> 
+        <span class="n">cleanupDuration</span><span class="o">,</span> 
+        <span class="n">unit</span>
+    <span class="o">);</span>
+<span class="o">}</span>
+</code></pre>
+
+</div>
+
+
+
+<p>This daemon thread runs periodic cleanup to prevent unbounded disk growth. You configure the cleanup frequency when initializing the disk store, ensuring L3 doesn't consume all server disk space over time.</p>
+
+<h2>
+  
+  
+  Cache Eviction: The Secret Sauce
+</h2>
+
+<p>The clever part is <em>when</em> data gets written to RocksDB. I don't persist every cache write—that would be wasteful. Instead, I persist on <strong>cache eviction</strong>.</p>
+
+<p>Caffeine's removal listener is the key:<br>
+</p>
+
+<div class="highlight js-code-highlight">
+<pre class="highlight java"><code><span class="k">this</span><span class="o">.</span><span class="na">cache</span> <span class="o">=</span> <span class="nc">Caffeine</span><span class="o">.</span><span class="na">newBuilder</span><span class="o">()</span>
+            <span class="o">.</span><span class="na">maximumSize</span><span class="o">(</span><span class="n">maxSize</span><span class="o">)</span>
+            <span class="o">.</span><span class="na">expireAfterWrite</span><span class="o">(</span><span class="n">ttl</span><span class="o">)</span>
+            <span class="o">.</span><span class="na">evictionListener</span><span class="o">((</span><span class="n">key</span><span class="o">,</span> <span class="n">value</span><span class="o">,</span> <span class="n">cause</span><span class="o">)</span> <span class="o">-&gt;</span> <span class="o">{</span>
+                <span class="k">this</span><span class="o">.</span><span class="na">diskStore</span><span class="o">.</span><span class="na">save</span><span class="o">(</span><span class="n">key</span><span class="o">,</span> <span class="n">value</span><span class="o">);</span> <span class="c1">// write to RocksDB        </span>
+            <span class="o">})</span>
+            <span class="o">.</span><span class="na">build</span><span class="o">();</span>
+</code></pre>
+
+</div>
+
+
+
+<p><strong>When does eviction happen?</strong></p>
+
+<ol>
+<li>
+<strong>Time-based expiry</strong>: Entry sits unused for X minutes → TTL expires → eviction</li>
+<li>
+<strong>Size-based eviction</strong>: Cache hits 10,000 entries → least recently used gets evicted</li>
+</ol>
+
+<p><strong>Why this approach is efficient:</strong></p>
+
+<p><strong>Hot data stays in memory</strong>: Frequently accessed configs never touch disk.</p>
+
+<p><strong>Cold data gets archived</strong>: When a config entry expires from L1, it gets persisted to L3 for outage scenarios.</p>
+
+<p><strong>Eviction-triggered persistence</strong>: Data is written to disk when evicted from memory, not on every cache operation.</p>
+
+<p><strong>During normal operations</strong>: L3 is write-mostly, read-rarely. The database is healthy, so cache misses go to L2, not L3.</p>
+
+<p><strong>During outages</strong>: L3 becomes read-heavy. Cache misses can't reach L2 (database down), so they fall back to L3 for stale data.</p>
+
+<p>This design means your disk isn't constantly thrashing with writes—it only persists data that's already being evicted from memory anyway.</p>
+
+<h2>
+  
+  
+  Benchmarking: Does This Actually Work?
+</h2>
+
+<p>I built a test harness to simulate realistic failure scenarios. Here are the results that convinced me this approach works:</p>
+
+<h3>
+  
+  
+  Test 1: Long Outage Resilience (25-min database failure)
+</h3>
+
+<p><strong>Setup</strong>: 10K cache entries, 5-min TTL, simulated database outage at T+0</p>
+
+<div class="table-wrapper-paragraph"><table>
+<thead>
+<tr>
+<th>Time Elapsed</th>
+<th>Tier Cache</th>
+<th>EhCache (disk)</th>
+<th>Caffeine Only</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>3 minutes</td>
+<td>100%</td>
+<td>100%</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>5 minutes</td>
+<td>100%</td>
+<td>0%</td>
+<td>0%</td>
+</tr>
+<tr>
+<td>7 minutes</td>
+<td>100%</td>
+<td>0%</td>
+<td>0%</td>
+</tr>
+<tr>
+<td>10 minutes</td>
+<td>100%</td>
+<td>0%</td>
+<td>0%</td>
+</tr>
+<tr>
+<td>25 minutes</td>
+<td>100%</td>
+<td>0%</td>
+<td>0%</td>
+</tr>
+</tbody>
+</table></div>
+
+<p><strong>Key finding</strong>: Tier cache maintained availability <strong>for previously-cached keys</strong> by <br>
+serving from L3 (RocksDB) after L1 expired.This assumes all requested keys were previously cached. In reality, newly added configs or never-requested keys won't be in L3 and will fail. This represents typical production traffic patterns.</p>
+
+<p>Why did EhCache fail? Its disk persistence is designed for overflow, not outage recovery. When the cache expires, it tries to fetch from the database (which is down) rather than serving stale disk data.</p
