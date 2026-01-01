@@ -169,4 +169,110 @@ Request 2: pool.query('BEGIN')     → Client A (reused!)
 
 <div class="highlight js-code-highlight">
 <pre class="highlight javascript"><code><span class="c1">// ✅ Reusable transaction wrapper</span>
-<span class="k">async</span> <span class="kd">function</span> <span class="nf">withTransaction</span><span class="
+<span class="k">async</span> <span class="kd">function</span> <span class="nf">withTransaction</span><span class="p">(</span><span class="nx">callback</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">client</span> <span class="o">=</span> <span class="k">await</span> <span class="nx">pool</span><span class="p">.</span><span class="nf">connect</span><span class="p">();</span>
+  <span class="k">try</span> <span class="p">{</span>
+    <span class="k">await</span> <span class="nx">client</span><span class="p">.</span><span class="nf">query</span><span class="p">(</span><span class="dl">'</span><span class="s1">BEGIN</span><span class="dl">'</span><span class="p">);</span>
+    <span class="kd">const</span> <span class="nx">result</span> <span class="o">=</span> <span class="k">await</span> <span class="nf">callback</span><span class="p">(</span><span class="nx">client</span><span class="p">);</span>
+    <span class="k">await</span> <span class="nx">client</span><span class="p">.</span><span class="nf">query</span><span class="p">(</span><span class="dl">'</span><span class="s1">COMMIT</span><span class="dl">'</span><span class="p">);</span>
+    <span class="k">return</span> <span class="nx">result</span><span class="p">;</span>
+  <span class="p">}</span> <span class="k">catch </span><span class="p">(</span><span class="nx">e</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">await</span> <span class="nx">client</span><span class="p">.</span><span class="nf">query</span><span class="p">(</span><span class="dl">'</span><span class="s1">ROLLBACK</span><span class="dl">'</span><span class="p">);</span>
+    <span class="k">throw</span> <span class="nx">e</span><span class="p">;</span>
+  <span class="p">}</span> <span class="k">finally</span> <span class="p">{</span>
+    <span class="nx">client</span><span class="p">.</span><span class="nf">release</span><span class="p">();</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c1">// Usage</span>
+<span class="k">await</span> <span class="nf">withTransaction</span><span class="p">(</span><span class="k">async </span><span class="p">(</span><span class="nx">client</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+  <span class="k">await</span> <span class="nx">client</span><span class="p">.</span><span class="nf">query</span><span class="p">(</span><span class="dl">'</span><span class="s1">UPDATE accounts SET...</span><span class="dl">'</span><span class="p">,</span> <span class="p">[</span><span class="nx">amount</span><span class="p">,</span> <span class="k">from</span><span class="p">]);</span>
+  <span class="k">await</span> <span class="nx">client</span><span class="p">.</span><span class="nf">query</span><span class="p">(</span><span class="dl">'</span><span class="s1">UPDATE accounts SET...</span><span class="dl">'</span><span class="p">,</span> <span class="p">[</span><span class="nx">amount</span><span class="p">,</span> <span class="nx">to</span><span class="p">]);</span>
+<span class="p">});</span>
+</code></pre>
+
+</div>
+
+
+
+<h2>
+  
+  
+  When To Use What
+</h2>
+
+<div class="table-wrapper-paragraph"><table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Single query</td>
+<td><code>pool.query()</code></td>
+</tr>
+<tr>
+<td>Multiple independent queries</td>
+<td><code>pool.query()</code></td>
+</tr>
+<tr>
+<td>Transaction (BEGIN/COMMIT)</td>
+<td>
+<code>pool.connect()</code> → <code>client.query()</code>
+</td>
+</tr>
+<tr>
+<td>Long-running session</td>
+<td>
+<code>pool.connect()</code> → <code>client.query()</code>
+</td>
+</tr>
+</tbody>
+</table></div>
+
+<h2>
+  
+  
+  Quick Install
+</h2>
+
+
+
+<div class="highlight js-code-highlight">
+<pre class="highlight shell"><code>npm <span class="nb">install</span> <span class="nt">--save-dev</span> eslint-plugin-pg
+</code></pre>
+
+</div>
+
+
+
+
+
+<div class="highlight js-code-highlight">
+<pre class="highlight javascript"><code><span class="k">import</span> <span class="nx">pg</span> <span class="k">from</span> <span class="dl">'</span><span class="s1">eslint-plugin-pg</span><span class="dl">'</span><span class="p">;</span>
+<span class="k">export</span> <span class="k">default</span> <span class="p">[</span><span class="nx">pg</span><span class="p">.</span><span class="nx">configs</span><span class="p">.</span><span class="nx">recommended</span><span class="p">];</span>
+</code></pre>
+
+</div>
+
+
+
+<p>Don't let race conditions corrupt your data.</p>
+
+
+
+
+<p>📦 <a href="https://www.npmjs.com/package/eslint-plugin-pg" rel="noopener noreferrer">npm: eslint-plugin-pg</a><br>
+📖 <a href="https://github.com/ofri-peretz/eslint/blob/main/packages/eslint-plugin-pg/docs/rules/no-transaction-on-pool.md" rel="noopener noreferrer">Rule docs: no-transaction-on-pool</a></p>
+
+<p><a href="https://github.com/ofri-peretz/eslint" class="ltag_cta ltag_cta--branded" rel="noopener noreferrer">⭐ Star on GitHub</a>
+</p>
+
+
+
+
+<p>🚀 <strong>Follow me for more security articles &amp; updates:</strong><br>
+<a href="https://github.com/ofri-peretz" rel="noopener noreferrer">GitHub</a> | <a href="https://linkedin.com/in/ofri-peretz" rel="noopener noreferrer">LinkedIn</a> | <a href="https://dev.to/ofri-peretz">Dev.to</a></p>
+
